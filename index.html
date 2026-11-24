@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#FFE500" />
+  <meta name="description" content="HAUL Restaurants Portal — register your restaurant, manage menu items, and fulfill food orders from the DoorDrop app." />
+  <title>HAUL · Restaurants Portal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div id="public" class="site-public">
+    <div class="atmosphere" aria-hidden="true"></div>
+    <header class="top">
+      <a class="brand-mark" href="#/" aria-label="HAUL">HAUL</a>
+      <nav class="top-nav" aria-label="Primary">
+        <button class="top-link" type="button" data-scroll="how">How it works</button>
+        <button class="top-link" id="quietLogin" type="button">Login</button>
+        <button class="top-cta" id="navRegister" type="button">Register</button>
+      </nav>
+    </header>
+
+    <div id="landing">
+      <section class="hero">
+        <div class="hero-copy">
+          <h1 class="logo">HAUL</h1>
+          <p class="tagline">Restaurants Portal</p>
+          <p class="lede">Receive food orders from DoorDrop customers. Manage your menu and kitchen status in one place.</p>
+          <div class="cta-row">
+            <button class="btn-ink" id="heroCta" type="button">
+              <span class="btn-label">Register restaurant</span>
+              <span class="btn-meta">Phone + OTP</span>
+            </button>
+            <button class="btn-outline" id="heroLogin" type="button">
+              <span class="btn-label">Login</span>
+              <span class="btn-meta">Open dashboard</span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section class="lp-band" id="how">
+        <div class="lp-wrap">
+          <p class="lp-kicker">How it works</p>
+          <h2 class="lp-title">Three steps to live food orders</h2>
+          <ol class="lp-steps">
+            <li>
+              <span class="lp-step-num">01</span>
+              <div>
+                <h3>Register with phone</h3>
+                <p>Restaurant name, location, and SMS OTP — then you are in.</p>
+              </div>
+            </li>
+            <li>
+              <span class="lp-step-num">02</span>
+              <div>
+                <h3>Menu goes live</h3>
+                <p>Starter dishes are seeded for you. Add or edit items anytime.</p>
+              </div>
+            </li>
+            <li>
+              <span class="lp-step-num">03</span>
+              <div>
+                <h3>Fulfill DoorDrop orders</h3>
+                <p>Incoming orders appear live. Mark received → preparing → ready.</p>
+              </div>
+            </li>
+          </ol>
+        </div>
+      </section>
+    </div>
+
+    <section class="auth-shell hidden" id="authCard">
+      <div class="auth-panel">
+        <button class="auth-back" id="authBackHome" type="button">Back home</button>
+        <p class="auth-kicker">HAUL</p>
+        <h2 id="authTitle">Login</h2>
+        <p class="auth-lead" id="authLead">Restaurant dashboard.</p>
+        <div class="auth-modes" id="authModes" role="tablist">
+          <button type="button" id="modeLogin" role="tab" aria-selected="true">Login</button>
+          <button type="button" id="modeRegister" role="tab" aria-selected="false">Register</button>
+        </div>
+        <form id="authForm" novalidate>
+          <p class="auth-step" id="authStep"></p>
+          <div id="stepPhone">
+            <label for="authPhone">Phone number</label>
+            <input id="authPhone" name="phone" placeholder="07XXXXXXXX" inputmode="tel" autocomplete="tel" />
+          </div>
+          <div id="stepOtp" class="hidden">
+            <label for="authOtp">SMS code</label>
+            <input id="authOtp" class="auth-otp" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="••••••" />
+            <div class="auth-row">
+              <button class="btn link quiet" id="otpChangePhone" type="button">Change number</button>
+              <button class="btn link quiet" id="otpResend" type="button">Resend</button>
+            </div>
+          </div>
+          <div id="stepDetails" class="hidden">
+            <label for="regRestaurantName">Restaurant name</label>
+            <input id="regRestaurantName" name="restaurantName" autocomplete="organization" />
+            <label for="regLocation">Location</label>
+            <input id="regLocation" name="location" placeholder="e.g. Masaki, Dar es Salaam" autocomplete="street-address" />
+          </div>
+          <p class="auth-error hidden" id="authError" role="alert"></p>
+          <button class="btn primary wide" id="authSubmit" type="submit">Continue</button>
+        </form>
+      </div>
+    </section>
+  </div>
+
+  <div id="app" class="app-shell hidden">
+    <aside class="sidebar">
+      <div class="side-brand">
+        <span class="brand-mark compact">HAUL</span>
+        <span class="side-sub">Restaurants</span>
+      </div>
+      <nav class="side-nav" aria-label="Dashboard">
+        <button type="button" class="side-link is-active" data-route="orders">Orders</button>
+        <button type="button" class="side-link" data-route="menu">Menu</button>
+        <button type="button" class="side-link" data-route="profile">Profile</button>
+      </nav>
+      <button type="button" class="btn quiet side-logout" id="logoutBtn">Sign out</button>
+    </aside>
+    <main class="main" id="mainView"></main>
+  </div>
+
+  <script>
+    globalThis.DOORDROP_ADMIN_CONFIG = globalThis.DOORDROP_ADMIN_CONFIG || {};
+  </script>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

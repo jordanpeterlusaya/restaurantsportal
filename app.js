@@ -309,6 +309,52 @@ async function updateOrderStatus(orderId, status) {
   });
 }
 
+function restaurantOpenNow(restaurant = state.restaurant) {
+  if (!restaurant) return true;
+  if (restaurant.isOpen === false || restaurant.acceptingOrders === false || restaurant.open === false) {
+    return false;
+  }
+  const status = String(restaurant.openStatus || '').toLowerCase();
+  return status !== 'closed' && status !== 'closed_now';
+}
+
+function telHref(phone) {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (digits.length < 9 || digits.length > 15) return '';
+  const withCountry =
+    digits.startsWith('255') || digits.startsWith('0')
+      ? digits.replace(/^0/, '255')
+      : digits.length === 9
+        ? `255${digits}`
+        : digits;
+  return `tel:+${withCountry}`;
+}
+
+async function setRestaurantOpen(isOpen) {
+  if (!state.restaurant?.id) return;
+  state.menuBusy = true;
+  render();
+  try {
+    await updateDoc(doc(db, 'restaurants', state.restaurant.id), {
+      isOpen: Boolean(isOpen),
+      acceptingOrders: Boolean(isOpen),
+      openStatus: isOpen ? 'open' : 'closed',
+      updatedAt: serverTimestamp(),
+    });
+    state.restaurant = {
+      ...state.restaurant,
+      isOpen: Boolean(isOpen),
+      acceptingOrders: Boolean(isOpen),
+      openStatus: isOpen ? 'open' : 'closed',
+    };
+  } catch (error) {
+    window.alert(error.message || 'Could not update open status.');
+  } finally {
+    state.menuBusy = false;
+    render();
+  }
+}
+
 function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -369,6 +415,26 @@ async function uploadMenuImage(file) {
   return { imageUrl: prepared.dataUrl, localPreview: prepared.previewUrl };
 }
 
+function foodEmojiForDish(name, category) {
+  const key = `${name || ''} ${category || ''}`.toLowerCase();
+  if (/embe|mango/.test(key)) return '🥭';
+  if (/juice|vinywaji|soda|maji/.test(key)) return '🧃';
+  if (/chipsi|fries|mayai/.test(key)) return '🍟';
+  if (/pilau|wali|rice|biryani/.test(key)) return '🍚';
+  if (/ugali/.test(key)) return '🥣';
+  if (/mishkaki|kebab/.test(key)) return '🍢';
+  if (/nyama|beef|mbuzi|kuku|chicken/.test(key)) return '🍖';
+  if (/samaki|fish/.test(key)) return '🐟';
+  if (/ndizi|plantain|banana/.test(key)) return '🍌';
+  if (/chapati|mkate|bread/.test(key)) return '🫓';
+  if (/supu|soup/.test(key)) return '🍲';
+  if (/salad|mboga/.test(key)) return '🥗';
+  if (/vitumbua|mandazi|dessert|tamu|cake/.test(key)) return '🍩';
+  if (/chai|kahawa|coffee|tea/.test(key)) return '☕';
+  if (/makande|maharage|beans/.test(key)) return '🫘';
+  return '🍽️';
+}
+
 async function addMenuItem(event) {
   event.preventDefault();
   if (!state.restaurant?.id || state.menuBusy) return;
@@ -400,7 +466,7 @@ async function addMenuItem(event) {
       price,
       currency: 'TZS',
       available: true,
-      emoji: '🍽️',
+      emoji: foodEmojiForDish(name, category),
       imageUrl: imageUrl || '',
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -498,6 +564,7 @@ async function saveMenuEdit(event) {
       category,
       description,
       price,
+      emoji: foodEmojiForDish(name, category),
       updatedAt: serverTimestamp(),
     };
     const file = form.image?.files?.[0];
@@ -534,19 +601,26 @@ function nextStatus(current) {
 }
 
 function renderOrders() {
+  const isOpen = restaurantOpenNow();
   const list = filteredOrders();
   const cards = list
     .map((order) => {
       const items = Array.isArray(order.items) ? order.items : [];
       const next = nextStatus(order.status);
       const badgeClass = String(order.status || 'received');
+      const phone = order.customerPhone || order.senderPhone || '';
+      const callUrl = telHref(phone);
+      const address = order.customerAddress || order.deliveryLabel || '';
+      const note = String(order.note || '').trim();
       return `
         <article class="order-card">
           <div class="order-card-top">
             <div>
               <h3>${escapeHtml(order.orderNumber || order.id)}</h3>
-              <p class="muted">${escapeHtml(order.customerName || 'Customer')} · ${escapeHtml(order.customerPhone || '—')}</p>
-              <p class="muted">${escapeHtml(order.customerAddress || order.deliveryLabel || '')}</p>
+              <p class="muted">${escapeHtml(order.customerName || 'Customer')}</p>
+              <p class="muted">${escapeHtml(phone || '—')}</p>
+              ${address ? `<p class="order-address">${escapeHtml(address)}</p>` : ''}
+              ${note ? `<p class="order-note">Maelezo: ${escapeHtml(note)}</p>` : ''}
             </div>
             <span class="badge ${escapeHtml(badgeClass)}">${escapeHtml(STATUS_LABEL[order.status] || order.status || 'Received')}</span>
           </div>
@@ -555,7 +629,7 @@ function renderOrders() {
               .map(
                 (item) => `
               <li>
-                <span>${escapeHtml(item.name)} × ${Number(item.quantity) || 1}</span>
+                <span>${escapeHtml(item.emoji || '🍽️')} ${escapeHtml(item.name)} × ${Number(item.quantity) || 1}</span>
                 <span class="price">${formatMoney((Number(item.price) || 0) * (Number(item.quantity) || 1))}</span>
               </li>`
               )
@@ -564,6 +638,11 @@ function renderOrders() {
           <div class="order-card-top">
             <strong>${formatMoney(order.total)}</strong>
             <div class="order-actions">
+              ${
+                callUrl
+                  ? `<a class="btn small primary" href="${escapeHtml(callUrl)}">Piga mteja</a>`
+                  : ''
+              }
               ${
                 next
                   ? `<button class="btn small" type="button" data-status="${next}" data-order="${escapeHtml(order.id)}">Mark ${escapeHtml(STATUS_LABEL[next])}</button>`
@@ -586,6 +665,13 @@ function renderOrders() {
         <h1>Orders</h1>
         <p>Live food orders from the DoorDrop app.</p>
       </div>
+      <button class="btn ${isOpen ? 'ghost' : 'primary'}" type="button" data-toggle-open="${isOpen ? '0' : '1'}" ${state.menuBusy ? 'disabled' : ''}>
+        ${isOpen ? 'Funga sasa' : 'Fungua sasa'}
+      </button>
+    </div>
+    <div class="open-banner ${isOpen ? 'is-open' : 'is-closed'}">
+      <strong>${isOpen ? 'Jikoni iko wazi' : 'Jikoni imefungwa'}</strong>
+      <span>${isOpen ? 'Wateja wanaweza kuagiza.' : 'Wateja hawaoni menyu yako hadi ufungue.'}</span>
     </div>
     <div class="stats">
       <div class="stat"><strong>${activeOrders().length}</strong><span>Active</span></div>
@@ -695,6 +781,9 @@ function renderMenu() {
 
 function renderProfile() {
   const r = state.restaurant || {};
+  const isOpen = restaurantOpenNow(r);
+  const phone = r.notificationPhone || r.phone || '';
+  const callUrl = telHref(phone);
   return `
     <div class="page-head">
       <div>
@@ -705,9 +794,25 @@ function renderProfile() {
     <div class="profile-card">
       <div class="profile-row"><span class="muted">Restaurant</span><strong>${escapeHtml(r.restaurantName || r.name || '—')}</strong></div>
       <div class="profile-row"><span class="muted">Location</span><strong>${escapeHtml(r.location || r.region || '—')}</strong></div>
-      <div class="profile-row"><span class="muted">Phone</span><strong>${escapeHtml(r.notificationPhone || r.phone || '—')}</strong></div>
-      <div class="profile-row"><span class="muted">Status</span><strong>${escapeHtml(r.status || 'active')}</strong></div>
+      <div class="profile-row">
+        <span class="muted">Phone</span>
+        <strong>${callUrl ? `<a href="${escapeHtml(callUrl)}">${escapeHtml(phone)}</a>` : escapeHtml(phone || '—')}</strong>
+      </div>
+      <div class="profile-row"><span class="muted">Account</span><strong>${escapeHtml(r.status || 'active')}</strong></div>
+      <div class="profile-row">
+        <span class="muted">Kitchen</span>
+        <strong class="${isOpen ? 'open-label' : 'closed-label'}">${isOpen ? 'Open' : 'Closed'}</strong>
+      </div>
       <div class="profile-row"><span class="muted">Restaurant ID</span><strong style="font-size:12px">${escapeHtml(r.id || '—')}</strong></div>
+    </div>
+    <div class="open-toggle-card">
+      <div>
+        <strong>${isOpen ? 'Jikoni iko wazi' : 'Jikoni imefungwa'}</strong>
+        <p class="muted">${isOpen ? 'Bonyeza kufunga ikiwa haupokei oda.' : 'Bonyeza kufungua ili wateja waone menyu.'}</p>
+      </div>
+      <button class="btn ${isOpen ? 'ghost' : 'primary'}" type="button" data-toggle-open="${isOpen ? '0' : '1'}" ${state.menuBusy ? 'disabled' : ''}>
+        ${isOpen ? 'Funga' : 'Fungua'}
+      </button>
     </div>`;
 }
 
@@ -735,6 +840,13 @@ function render() {
   document.querySelectorAll('.side-link').forEach((btn) => {
     btn.classList.toggle('is-active', btn.dataset.route === state.route);
   });
+
+  const sideSub = document.querySelector('.side-sub');
+  if (sideSub) {
+    const kitchen = state.restaurant?.restaurantName || state.restaurant?.name || 'Restaurants';
+    const open = restaurantOpenNow();
+    sideSub.textContent = `${kitchen} · ${open ? 'Open' : 'Closed'}`;
+  }
 
   const main = $('mainView');
   if (!main) return;
@@ -825,6 +937,11 @@ function bindUi() {
     const toggle = event.target.closest?.('[data-toggle-menu]');
     if (toggle) {
       void toggleMenuItem(toggle.dataset.toggleMenu, toggle.dataset.available === '1');
+      return;
+    }
+    const openBtn = event.target.closest?.('[data-toggle-open]');
+    if (openBtn) {
+      void setRestaurantOpen(openBtn.dataset.toggleOpen === '1');
     }
   });
 

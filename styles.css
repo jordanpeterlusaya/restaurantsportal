@@ -488,6 +488,44 @@ h1, h2, h3, p { margin: 0; }
   font-size: 14px;
 }
 .profile-row:last-child { border-bottom: 0; }
+.open-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  margin-bottom: 14px;
+  border: 1px solid var(--line);
+}
+.open-banner.is-open { background: #ecfdf5; border-color: #a7f3d0; }
+.open-banner.is-closed { background: #fff7ed; border-color: #fed7aa; }
+.open-toggle-card {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: #fff;
+  max-width: 480px;
+}
+.open-label { color: #047857; }
+.closed-label { color: #c2410c; }
+.order-address {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--ink);
+  font-weight: 700;
+}
+.order-note {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.order-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.order-actions a.btn { text-decoration: none; display: inline-flex; align-items: center; }
 
 @media (max-width: 860px) {
   .app-shell { grid-template-columns: 1fr; }

@@ -114,6 +114,7 @@ const state = {
   busy: false,
   menuBusy: false,
   pendingImage: null,
+  editingId: null,
   unsubscribers: [],
 };
 
@@ -498,6 +499,45 @@ async function toggleMenuItem(id, available) {
   });
 }
 
+async function saveMenuEdit(event) {
+  event.preventDefault();
+  const id = state.editingId;
+  if (!id || state.menuBusy) return;
+  const form = event.currentTarget;
+  const name = String(form.name.value || '').trim();
+  const category = String(form.category.value || 'Food').trim() || 'Food';
+  const description = String(form.description?.value || '').trim();
+  const price = Number(form.price.value);
+  if (!name || !Number.isFinite(price) || price <= 0) {
+    window.alert('Weka jina na bei sahihi.');
+    return;
+  }
+  state.menuBusy = true;
+  render();
+  try {
+    const patch = {
+      name,
+      category,
+      description,
+      price,
+      updatedAt: serverTimestamp(),
+    };
+    const file = form.image?.files?.[0];
+    if (file) {
+      const uploaded = await uploadMenuImage(file);
+      if (!uploaded.imageUrl) throw new Error('Picha haikupakiwa.');
+      patch.imageUrl = uploaded.imageUrl;
+    }
+    await updateDoc(doc(db, 'menuItems', id), patch);
+    state.editingId = null;
+  } catch (error) {
+    window.alert(error.message || 'Could not update menu item.');
+  } finally {
+    state.menuBusy = false;
+    render();
+  }
+}
+
 function activeOrders() {
   return state.orders.filter((o) => !['delivered', 'cancelled'].includes(String(o.status || '')));
 }
@@ -591,6 +631,20 @@ function renderMenu() {
       const thumb = item.imageUrl
         ? `<img class="menu-thumb" src="${escapeHtml(item.imageUrl)}" alt="" />`
         : `<span class="menu-thumb placeholder">${escapeHtml(item.emoji || '🍽️')}</span>`;
+      if (state.editingId === item.id) {
+        return `
+        <form class="menu-form menu-edit" data-edit-form="${escapeHtml(item.id)}">
+          <label>Jina<input name="name" value="${escapeHtml(item.name)}" required /></label>
+          <label>Kategoria<input name="category" value="${escapeHtml(item.category || '')}" /></label>
+          <label>Bei (TZS)<input name="price" type="number" min="500" step="500" value="${Number(item.price) || ''}" required /></label>
+          <label class="menu-form-span">Maelezo<textarea name="description" rows="2">${escapeHtml(item.description || '')}</textarea></label>
+          <label class="menu-form-span">Badilisha picha<input name="image" type="file" accept="image/*" /></label>
+          <div class="menu-edit-actions">
+            <button class="btn primary" type="submit" ${state.menuBusy ? 'disabled' : ''}>${state.menuBusy ? 'Inahifadhi…' : 'Hifadhi'}</button>
+            <button class="btn small ghost" type="button" data-cancel-edit="1">Ghairi</button>
+          </div>
+        </form>`;
+      }
       return `
       <article class="menu-card">
         <div class="menu-card-main">
@@ -603,6 +657,7 @@ function renderMenu() {
         </div>
         <div class="menu-card-actions">
           <span class="price">${formatMoney(item.price)}</span>
+          <button class="btn small ghost" type="button" data-edit-menu="${escapeHtml(item.id)}">Hariri</button>
           <button class="btn small ghost" type="button" data-toggle-menu="${escapeHtml(item.id)}" data-available="${item.available === false ? '0' : '1'}">
             ${item.available === false ? 'Show' : 'Hide'}
           </button>
@@ -712,6 +767,9 @@ function render() {
   $('menuForm')?.addEventListener('submit', (event) => {
     void addMenuItem(event);
   });
+  document.querySelector('[data-edit-form]')?.addEventListener('submit', (event) => {
+    void saveMenuEdit(event);
+  });
 }
 
 function bindUi() {
@@ -767,6 +825,18 @@ function bindUi() {
     const statusBtn = event.target.closest?.('[data-status][data-order]');
     if (statusBtn) {
       void updateOrderStatus(statusBtn.dataset.order, statusBtn.dataset.status);
+      return;
+    }
+    const editBtn = event.target.closest?.('[data-edit-menu]');
+    if (editBtn) {
+      state.editingId = editBtn.dataset.editMenu || null;
+      state.route = 'menu';
+      render();
+      return;
+    }
+    if (event.target.closest?.('[data-cancel-edit]')) {
+      state.editingId = null;
+      render();
       return;
     }
     const juiceBtn = event.target.closest?.('[data-add-juice]');

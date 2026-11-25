@@ -411,6 +411,8 @@ h1, h2, h3, p { margin: 0; }
 }
 .menu-form textarea { min-height: 72px; padding: 10px 12px; resize: vertical; }
 .menu-form-span { grid-column: 1 / -1; }
+.menu-edit { margin-bottom: 12px; }
+.menu-edit-actions { display: flex; gap: 8px; align-items: center; grid-column: 1 / -1; }
 .menu-card {
   display: flex;
   justify-content: space-between;

@@ -440,6 +440,12 @@ async function addHaulJuicePreset(presetKey) {
   if (!state.restaurant?.id || state.menuBusy) return;
   const preset = HAUL_JUICE_PRESETS.find((item) => item.key === presetKey);
   if (!preset) return;
+  const fileInput = document.querySelector(`[data-juice-photo="${presetKey}"]`);
+  const file = fileInput?.files?.[0];
+  if (!file) {
+    window.alert('Weka picha ya juice kwanza. Kila mgahawa anapakia picha yake.');
+    return;
+  }
 
   const already = state.menu.some(
     (item) =>
@@ -454,6 +460,8 @@ async function addHaulJuicePreset(presetKey) {
   state.menuBusy = true;
   render();
   try {
+    const uploaded = await uploadMenuImage(file);
+    if (!uploaded.imageUrl) throw new Error('Picha haikupakiwa.');
     await addDoc(collection(db, 'menuItems'), {
       restaurantId: state.restaurant.id,
       restaurantName: state.restaurant.restaurantName || state.restaurant.name || '',
@@ -471,7 +479,7 @@ async function addHaulJuicePreset(presetKey) {
       sizeLabel: preset.sizeLabel,
       flavor: preset.flavor,
       benefitLine: preset.benefitLine,
-      imageUrl: '',
+      imageUrl: uploaded.imageUrl,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
@@ -607,9 +615,22 @@ function renderMenu() {
     const listed = state.menu.some(
       (item) => item.isBrandJuice === true && String(item.flavor || '').toLowerCase() === preset.flavor
     );
-    return `<button class="btn small ${listed ? 'ghost' : 'primary'}" type="button" data-add-juice="${preset.key}" ${listed || state.menuBusy ? 'disabled' : ''}>
-      ${listed ? `Listed · ${escapeHtml(preset.name)}` : `Add ${escapeHtml(preset.name)} · ${formatMoney(preset.price)}`}
-    </button>`;
+    if (listed) {
+      return `<article class="juice-card is-listed">
+        <strong>${escapeHtml(preset.name)}</strong>
+        <span class="muted">Ipo kwenye menyu · ${formatMoney(preset.price)}</span>
+      </article>`;
+    }
+    return `<article class="juice-card">
+      <strong>${escapeHtml(preset.name)}</strong>
+      <span class="muted">${escapeHtml(preset.sizeLabel)} · ${formatMoney(preset.price)}</span>
+      <label>Picha ya juice
+        <input type="file" accept="image/*" data-juice-photo="${escapeHtml(preset.key)}" ${state.menuBusy ? 'disabled' : ''} />
+      </label>
+      <button class="btn small primary" type="button" data-add-juice="${preset.key}" ${state.menuBusy ? 'disabled' : ''}>
+        Pakia picha na ongeza
+      </button>
+    </article>`;
   }).join('');
 
   return `
@@ -622,7 +643,7 @@ function renderMenu() {
     <section class="juice-panel">
       <div>
         <h2>HAUL Juice brand</h2>
-        <p class="muted">Stock Embe, Paseni, or Nanasi on your menu. Marked as HAUL brand for the customer app.</p>
+        <p class="muted">Pakia picha halisi ya kila juice. App inaonyesha picha uliyoweka, si picha bandia.</p>
       </div>
       <div class="juice-actions">${juiceButtons}</div>
     </section>

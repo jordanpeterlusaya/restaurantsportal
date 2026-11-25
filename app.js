@@ -19,7 +19,6 @@ import {
   orderBy,
   query,
   serverTimestamp,
-  setDoc,
   updateDoc,
   where,
 } from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-firestore.js';
@@ -50,6 +49,43 @@ function createPortalAuth(firebaseApp) {
 const auth = createPortalAuth(app);
 const db = getFirestore(app);
 
+const HAUL_BRAND_JUICE_TAG = 'haul_juice';
+const HAUL_JUICE_PRESETS = [
+  {
+    key: 'embe',
+    name: 'HAUL Juice Embe',
+    category: 'Vinywaji · HAUL',
+    price: 2500,
+    emoji: '🥭',
+    sizeLabel: 'Ndogo',
+    flavor: 'embe',
+    benefitLine: 'Baridi · embe asili',
+    description: 'HAUL mango juice — cold, natural mango flavor.',
+  },
+  {
+    key: 'paseni',
+    name: 'HAUL Juice Paseni',
+    category: 'Vinywaji · HAUL',
+    price: 3500,
+    emoji: '🧃',
+    sizeLabel: 'Kati',
+    flavor: 'paseni',
+    benefitLine: 'Paseni safi · inafaa na chakula',
+    description: 'HAUL passion juice — made to pair with meals.',
+  },
+  {
+    key: 'nanasi',
+    name: 'HAUL Juice Nanasi',
+    category: 'Vinywaji · HAUL',
+    price: 4500,
+    emoji: '🍍',
+    sizeLabel: 'Kubwa',
+    flavor: 'nanasi',
+    benefitLine: 'Kubwa · baridi kwa mlo mzito',
+    description: 'HAUL pineapple juice — large cold serve.',
+  },
+];
+
 const STATUS_FLOW = ['received', 'preparing', 'ready', 'out_for_delivery', 'delivered'];
 const STATUS_LABEL = {
   received: 'Received',
@@ -76,6 +112,8 @@ const state = {
   route: 'orders',
   orderTab: 'active',
   busy: false,
+  menuBusy: false,
+  pendingImage: null,
   unsubscribers: [],
 };
 
@@ -83,11 +121,12 @@ function apiBase() {
   return (runtime.apiBaseUrl || 'https://us-central1-efootball-app-9d175.cloudfunctions.net/api').replace(/\/+$/, '');
 }
 
-async function api(path, body) {
+async function api(path, body, options = {}) {
+  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
   const res = await fetch(`${apiBase()}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body || {}),
+    method: options.method || 'POST',
+    headers,
+    body: body === undefined ? undefined : JSON.stringify(body || {}),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
@@ -190,7 +229,6 @@ function subscribeRestaurantData(restaurantId) {
         render();
       },
       async () => {
-        // Fallback without orderBy if composite index missing
         const fallback = query(collection(db, 'foodOrders'), where('restaurantId', '==', restaurantId));
         state.unsubscribers.push(
           onSnapshot(fallback, (snap) => {
@@ -292,30 +330,157 @@ async function updateOrderStatus(orderId, status) {
   });
 }
 
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Could not read image.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function compressImageFile(file, maxEdge = 1280, quality = 0.82) {
+  const dataUrl = await fileToDataUrl(file);
+  const img = await new Promise((resolve, reject) => {
+    const el = new Image();
+    el.onload = () => resolve(el);
+    el.onerror = () => reject(new Error('Invalid image.'));
+    el.src = dataUrl;
+  });
+  const scale = Math.min(1, maxEdge / Math.max(img.width, img.height));
+  const width = Math.max(1, Math.round(img.width * scale));
+  const height = Math.max(1, Math.round(img.height * scale));
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0, width, height);
+  const contentType = 'image/jpeg';
+  const compressed = canvas.toDataURL(contentType, quality);
+  return { dataUrl: compressed, contentType, previewUrl: compressed };
+}
+
+async function uploadMenuImage(file) {
+  if (!state.user || !state.restaurant?.id) {
+    throw new Error('Sign in before uploading photos.');
+  }
+  const prepared = await compressImageFile(file);
+  const idToken = await state.user.getIdToken();
+  try {
+    const payload = await api(
+      '/media/restaurant-menu',
+      {
+        imageBase64: prepared.dataUrl,
+        contentType: prepared.contentType,
+        restaurantId: state.restaurant.id,
+      },
+      { headers: { Authorization: `Bearer ${idToken}` } }
+    );
+    if (payload.downloadURL) {
+      return { imageUrl: payload.downloadURL, localPreview: prepared.previewUrl };
+    }
+  } catch (error) {
+    // Fallback: keep a compressed data URL so the dish still has a real owner photo.
+    if (prepared.dataUrl.length > 900_000) {
+      throw new Error(error.message || 'Image upload failed. Try a smaller photo.');
+    }
+    console.warn('menu image API upload failed; using compressed data URL', error);
+    return { imageUrl: prepared.dataUrl, localPreview: prepared.previewUrl };
+  }
+  return { imageUrl: prepared.dataUrl, localPreview: prepared.previewUrl };
+}
+
 async function addMenuItem(event) {
   event.preventDefault();
-  if (!state.restaurant?.id) return;
+  if (!state.restaurant?.id || state.menuBusy) return;
   const form = event.currentTarget;
   const name = String(form.name.value || '').trim();
   const category = String(form.category.value || 'Food').trim() || 'Food';
+  const description = String(form.description?.value || '').trim();
   const price = Number(form.price.value);
   if (!name || !Number.isFinite(price) || price <= 0) {
     window.alert('Enter a name and valid price.');
     return;
   }
-  await addDoc(collection(db, 'menuItems'), {
-    restaurantId: state.restaurant.id,
-    restaurantName: state.restaurant.restaurantName || state.restaurant.name || '',
-    name,
-    category,
-    price,
-    currency: 'TZS',
-    available: true,
-    emoji: '🍽️',
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  });
-  form.reset();
+
+  state.menuBusy = true;
+  render();
+  try {
+    let imageUrl = '';
+    const file = form.image?.files?.[0] || state.pendingImage;
+    if (file) {
+      const uploaded = await uploadMenuImage(file);
+      imageUrl = uploaded.imageUrl;
+    }
+    await addDoc(collection(db, 'menuItems'), {
+      restaurantId: state.restaurant.id,
+      restaurantName: state.restaurant.restaurantName || state.restaurant.name || '',
+      name,
+      category,
+      description: description || '',
+      price,
+      currency: 'TZS',
+      available: true,
+      emoji: '🍽️',
+      imageUrl: imageUrl || '',
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    form.reset();
+    state.pendingImage = null;
+  } catch (error) {
+    window.alert(error.message || 'Could not add menu item.');
+  } finally {
+    state.menuBusy = false;
+    render();
+  }
+}
+
+async function addHaulJuicePreset(presetKey) {
+  if (!state.restaurant?.id || state.menuBusy) return;
+  const preset = HAUL_JUICE_PRESETS.find((item) => item.key === presetKey);
+  if (!preset) return;
+
+  const already = state.menu.some(
+    (item) =>
+      item.isBrandJuice === true &&
+      String(item.flavor || '').toLowerCase() === preset.flavor
+  );
+  if (already) {
+    window.alert(`${preset.name} is already on your menu.`);
+    return;
+  }
+
+  state.menuBusy = true;
+  render();
+  try {
+    await addDoc(collection(db, 'menuItems'), {
+      restaurantId: state.restaurant.id,
+      restaurantName: state.restaurant.restaurantName || state.restaurant.name || '',
+      name: preset.name,
+      category: preset.category,
+      description: preset.description,
+      price: preset.price,
+      currency: 'TZS',
+      available: true,
+      emoji: preset.emoji,
+      isBrandJuice: true,
+      brandTag: HAUL_BRAND_JUICE_TAG,
+      brandJuice: true,
+      highlight: 'HAUL',
+      sizeLabel: preset.sizeLabel,
+      flavor: preset.flavor,
+      benefitLine: preset.benefitLine,
+      imageUrl: '',
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    window.alert(error.message || 'Could not add HAUL Juice.');
+  } finally {
+    state.menuBusy = false;
+    render();
+  }
 }
 
 async function toggleMenuItem(id, available) {
@@ -413,38 +578,64 @@ function renderOrders() {
 
 function renderMenu() {
   const rows = state.menu
-    .map(
-      (item) => `
+    .map((item) => {
+      const brand = item.isBrandJuice === true || String(item.brandTag || '').toLowerCase() === HAUL_BRAND_JUICE_TAG;
+      const thumb = item.imageUrl
+        ? `<img class="menu-thumb" src="${escapeHtml(item.imageUrl)}" alt="" />`
+        : `<span class="menu-thumb placeholder">${escapeHtml(item.emoji || '🍽️')}</span>`;
+      return `
       <article class="menu-card">
-        <div>
-          <strong>${escapeHtml(item.emoji || '🍽️')} ${escapeHtml(item.name)}</strong>
-          <p class="muted">${escapeHtml(item.category || 'Food')} · ${item.available === false ? 'Hidden' : 'Available'}</p>
+        <div class="menu-card-main">
+          ${thumb}
+          <div>
+            <strong>${escapeHtml(item.name)}${brand ? ' <span class="haul-pill">HAUL</span>' : ''}</strong>
+            <p class="muted">${escapeHtml(item.category || 'Food')}${item.sizeLabel ? ` · ${escapeHtml(item.sizeLabel)}` : ''} · ${item.available === false ? 'Hidden' : 'Available'}</p>
+            ${item.description ? `<p class="muted menu-desc">${escapeHtml(item.description)}</p>` : ''}
+          </div>
         </div>
-        <div style="display:flex;gap:10px;align-items:center">
+        <div class="menu-card-actions">
           <span class="price">${formatMoney(item.price)}</span>
           <button class="btn small ghost" type="button" data-toggle-menu="${escapeHtml(item.id)}" data-available="${item.available === false ? '0' : '1'}">
             ${item.available === false ? 'Show' : 'Hide'}
           </button>
         </div>
-      </article>`
-    )
+      </article>`;
+    })
     .join('');
+
+  const juiceButtons = HAUL_JUICE_PRESETS.map((preset) => {
+    const listed = state.menu.some(
+      (item) => item.isBrandJuice === true && String(item.flavor || '').toLowerCase() === preset.flavor
+    );
+    return `<button class="btn small ${listed ? 'ghost' : 'primary'}" type="button" data-add-juice="${preset.key}" ${listed || state.menuBusy ? 'disabled' : ''}>
+      ${listed ? `Listed · ${escapeHtml(preset.name)}` : `Add ${escapeHtml(preset.name)} · ${formatMoney(preset.price)}`}
+    </button>`;
+  }).join('');
 
   return `
     <div class="page-head">
       <div>
         <h1>Menu</h1>
-        <p>Items customers can order in DoorDrop.</p>
+        <p>Real dishes customers see in the HAUL app — no fake seed food.</p>
       </div>
     </div>
+    <section class="juice-panel">
+      <div>
+        <h2>HAUL Juice brand</h2>
+        <p class="muted">Stock Embe, Paseni, or Nanasi on your menu. Marked as HAUL brand for the customer app.</p>
+      </div>
+      <div class="juice-actions">${juiceButtons}</div>
+    </section>
     <form class="menu-form" id="menuForm">
-      <label>Name<input name="name" placeholder="e.g. Cheese Burger" required /></label>
-      <label>Category<input name="category" placeholder="Burgers" /></label>
-      <label>Price (TZS)<input name="price" type="number" min="500" step="500" placeholder="12000" required /></label>
-      <button class="btn primary" type="submit">Add item</button>
+      <label>Name<input name="name" placeholder="e.g. Chipsi Mayai" required /></label>
+      <label>Category<input name="category" placeholder="Chakula kikuu" /></label>
+      <label>Price (TZS)<input name="price" type="number" min="500" step="500" placeholder="4500" required /></label>
+      <label class="menu-form-span">Description<textarea name="description" rows="2" placeholder="Short honest description of the dish"></textarea></label>
+      <label class="menu-form-span">Photo (upload)<input name="image" type="file" accept="image/*" /></label>
+      <button class="btn primary" type="submit" ${state.menuBusy ? 'disabled' : ''}>${state.menuBusy ? 'Saving…' : 'Add food item'}</button>
     </form>
     <div class="card-list">
-      ${rows || '<div class="empty">No menu items yet.</div>'}
+      ${rows || '<div class="empty">No menu items yet. Add your real food or HAUL Juice above.</div>'}
     </div>`;
 }
 
@@ -555,6 +746,11 @@ function bindUi() {
     const statusBtn = event.target.closest?.('[data-status][data-order]');
     if (statusBtn) {
       void updateOrderStatus(statusBtn.dataset.order, statusBtn.dataset.status);
+      return;
+    }
+    const juiceBtn = event.target.closest?.('[data-add-juice]');
+    if (juiceBtn) {
+      void addHaulJuicePreset(juiceBtn.dataset.addJuice);
       return;
     }
     const toggle = event.target.closest?.('[data-toggle-menu]');

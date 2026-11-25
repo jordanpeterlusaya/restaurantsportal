@@ -402,20 +402,68 @@ h1, h2, h3, p { margin: 0; }
   align-items: end;
 }
 .menu-form label { font-size: 12px; font-weight: 600; color: var(--muted); display: grid; gap: 6px; }
-.menu-form input {
+.menu-form input, .menu-form textarea {
   min-height: 44px;
   border-radius: 12px;
   border: 1.5px solid var(--line);
   padding: 0 12px;
+  background: #fff;
 }
+.menu-form textarea { min-height: 72px; padding: 10px 12px; resize: vertical; }
+.menu-form-span { grid-column: 1 / -1; }
 .menu-card {
   display: flex;
   justify-content: space-between;
   gap: 12px;
   align-items: center;
 }
+.menu-card-main { display: flex; gap: 12px; align-items: center; min-width: 0; }
+.menu-card-actions { display: flex; gap: 10px; align-items: center; flex-shrink: 0; }
+.menu-thumb {
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  object-fit: cover;
+  background: #f3f4f6;
+  flex-shrink: 0;
+}
+.menu-thumb.placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+}
+.menu-desc { margin-top: 4px; max-width: 42ch; }
 .menu-card strong { font-size: 15px; }
+.haul-pill {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--yellow);
+  color: var(--ink);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  vertical-align: middle;
+}
+.juice-panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 16px;
+  display: grid;
+  gap: 12px;
+}
+.juice-panel h2 { font-size: 16px; letter-spacing: -0.02em; }
+.juice-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .price { font-weight: 800; letter-spacing: -0.02em; }
+.btn.small { min-height: 36px; padding: 0 12px; border-radius: 999px; border: 0; font-weight: 700; font-size: 12px; }
+.btn.small.primary { background: var(--cta); color: #fff; }
+.btn.small.ghost { background: #f3f4f6; color: var(--ink); }
+.btn.small:disabled { opacity: 0.55; cursor: not-allowed; }
 
 .profile-card { display: grid; gap: 10px; max-width: 480px; }
 .profile-row {

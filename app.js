@@ -55,34 +55,12 @@ const HAUL_JUICE_PRESETS = [
     key: 'embe',
     name: 'HAUL Juice Embe',
     category: 'Vinywaji · HAUL',
-    price: 2500,
+    price: 1000,
     emoji: '🥭',
-    sizeLabel: 'Ndogo',
+    sizeLabel: '',
     flavor: 'embe',
     benefitLine: 'Baridi · embe asili',
-    description: 'HAUL mango juice — cold, natural mango flavor.',
-  },
-  {
-    key: 'paseni',
-    name: 'HAUL Juice Paseni',
-    category: 'Vinywaji · HAUL',
-    price: 3500,
-    emoji: '🧃',
-    sizeLabel: 'Kati',
-    flavor: 'paseni',
-    benefitLine: 'Paseni safi · inafaa na chakula',
-    description: 'HAUL passion juice — made to pair with meals.',
-  },
-  {
-    key: 'nanasi',
-    name: 'HAUL Juice Nanasi',
-    category: 'Vinywaji · HAUL',
-    price: 4500,
-    emoji: '🍍',
-    sizeLabel: 'Kubwa',
-    flavor: 'nanasi',
-    benefitLine: 'Kubwa · baridi kwa mlo mzito',
-    description: 'HAUL pineapple juice — large cold serve.',
+    description: 'Juice ya embe ya HAUL. Bei ni TZS 1,000.',
   },
 ];
 
@@ -698,7 +676,7 @@ function renderMenu() {
     <section class="juice-panel">
       <div>
         <h2>HAUL Juice brand</h2>
-        <p class="muted">Pakia picha halisi ya kila juice. App inaonyesha picha uliyoweka, si picha bandia.</p>
+        <p class="muted">Juice inayouzwa ni embe tu, bei TZS 1,000. Pakia picha halisi ya embe.</p>
       </div>
       <div class="juice-actions">${juiceButtons}</div>
     </section>
